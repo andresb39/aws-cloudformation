@@ -1,0 +1,67 @@
+Parameters:
+  paramBucketName:
+    Type: String
+    Description: Bucket Name
+Resources:
+  mySQS:
+    Type: 'AWS::SQS::Queue'
+  mysqspolicy:
+    Type: 'AWS::SQS::QueuePolicy'
+    DependsOn:
+      - mySQS
+    Properties:
+      PolicyDocument:
+        Id: MyQueuePolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow-User-SendMessage
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'SQS:SendMessage'
+            Resource: '*'
+            Condition:
+              ArnLike:
+                'aws:SourceArn': 'arn:aws:s3:::*'
+      Queues:
+        - !Ref mySQS
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: BucketOwnerFullControl
+      BucketName: !Ref paramBucketName
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt mySQS.Arn
+  S3User:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+        - PolicyName: bucket-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - s3:*
+              Resource:
+                - !Sub arn:aws:s3:::${S3Bucket}
+                - !Sub arn:aws:s3:::${S3Bucket}/*
+
+  S3UserAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref S3User
+Outputs:
+  BucketName:
+    Value: !Ref 'S3Bucket'
+    Description: Name of the Amazon S3 bucket.
+  S3BucketSecureURL:
+    Value: !Join ['', ['https://', !GetAtt [S3Bucket, DomainName]]]
+    Description: Domain Name of the Amazon S3 bucket
+  BucketName:
+    Value: !Ref S3Bucket
+  User:
+    Value: !Ref S3User
